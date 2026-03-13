@@ -17,6 +17,7 @@ export const SIGNAL_EVENTS = {
   PEER_JOINED: 'signal:peer-joined',
   PEER_LEFT: 'signal:peer-left',
   MUTE_TOGGLE: 'signal:mute-toggle',
+  MEDIA_STATE: 'signal:media-state',
   ROOM_PEERS: 'signal:room-peers',
 } as const;
 

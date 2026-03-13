@@ -10,8 +10,10 @@ interface MediaDeviceOption {
 export function useMediaDevices() {
   const [audioInputs, setAudioInputs] = useState<MediaDeviceOption[]>([]);
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceOption[]>([]);
+  const [videoInputs, setVideoInputs] = useState<MediaDeviceOption[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>('');
   const [selectedOutput, setSelectedOutput] = useState<string>('');
+  const [selectedVideoInput, setSelectedVideoInput] = useState<string>('');
 
   const enumerateDevices = useCallback(async () => {
     try {
@@ -22,9 +24,13 @@ export function useMediaDevices() {
       const outputs = devices
         .filter((d) => d.kind === 'audiooutput')
         .map((d) => ({ deviceId: d.deviceId, label: d.label || `Speaker ${d.deviceId.slice(0, 4)}` }));
+      const videos = devices
+        .filter((d) => d.kind === 'videoinput')
+        .map((d) => ({ deviceId: d.deviceId, label: d.label || `Camera ${d.deviceId.slice(0, 4)}` }));
 
       setAudioInputs(inputs);
       setAudioOutputs(outputs);
+      setVideoInputs(videos);
 
       if (!selectedInput && inputs.length > 0) {
         setSelectedInput(inputs[0].deviceId);
@@ -32,10 +38,13 @@ export function useMediaDevices() {
       if (!selectedOutput && outputs.length > 0) {
         setSelectedOutput(outputs[0].deviceId);
       }
+      if (!selectedVideoInput && videos.length > 0) {
+        setSelectedVideoInput(videos[0].deviceId);
+      }
     } catch (err) {
       console.error('Failed to enumerate devices:', err);
     }
-  }, [selectedInput, selectedOutput]);
+  }, [selectedInput, selectedOutput, selectedVideoInput]);
 
   useEffect(() => {
     enumerateDevices();
@@ -48,9 +57,12 @@ export function useMediaDevices() {
   return {
     audioInputs,
     audioOutputs,
+    videoInputs,
     selectedInput,
     selectedOutput,
+    selectedVideoInput,
     setSelectedInput,
     setSelectedOutput,
+    setSelectedVideoInput,
   };
 }

@@ -23,6 +23,8 @@ interface RoomPeer {
   userId: string;
   displayName: string;
   isMuted: boolean;
+  isCameraOn: boolean;
+  isScreenSharing: boolean;
 }
 
 @WebSocketGateway({ namespace: SIGNALING_NAMESPACE, cors: { origin: '*' } })
@@ -34,6 +36,7 @@ export class SignalingGateway
   // In-memory peer tracking (for v1; Redis in production)
   private roomPeers = new Map<string, Map<string, RoomPeer>>();
   private socketToRoom = new Map<string, string>();
+  private roomScreenSharer = new Map<string, string>(); // roomId → userId
 
   constructor(
     private jwtService: JwtService,
@@ -89,6 +92,8 @@ export class SignalingGateway
       userId,
       displayName: client.data.displayName || userId,
       isMuted: false,
+      isCameraOn: false,
+      isScreenSharing: false,
     });
 
     // Send existing peers to the new joiner
@@ -98,6 +103,8 @@ export class SignalingGateway
         userId: p.userId,
         displayName: p.displayName,
         isMuted: p.isMuted,
+        isCameraOn: p.isCameraOn,
+        isScreenSharing: p.isScreenSharing,
       }));
 
     client.emit(SIGNAL_EVENTS.ROOM_PEERS, { roomId, peers: existingPeers });
@@ -105,7 +112,13 @@ export class SignalingGateway
     // Notify others
     client.to(`signal:${roomId}`).emit(SIGNAL_EVENTS.PEER_JOINED, {
       roomId,
-      peer: { userId, displayName: client.data.displayName, isMuted: false },
+      peer: {
+        userId,
+        displayName: client.data.displayName,
+        isMuted: false,
+        isCameraOn: false,
+        isScreenSharing: false,
+      },
     });
 
     // Join in DB
@@ -119,7 +132,13 @@ export class SignalingGateway
   @SubscribeMessage(SIGNAL_EVENTS.OFFER)
   handleOffer(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { roomId: string; targetUserId: string; sdp: any },
+    @MessageBody()
+    data: {
+      roomId: string;
+      targetUserId: string;
+      sdp: any;
+      streamMeta?: Record<string, string>;
+    },
   ) {
     const targetPeer = this.findPeerSocket(data.roomId, data.targetUserId);
     if (targetPeer) {
@@ -127,6 +146,7 @@ export class SignalingGateway
         roomId: data.roomId,
         fromUserId: client.data.userId,
         sdp: data.sdp,
+        streamMeta: data.streamMeta,
       });
     }
   }
@@ -134,7 +154,13 @@ export class SignalingGateway
   @SubscribeMessage(SIGNAL_EVENTS.ANSWER)
   handleAnswer(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { roomId: string; targetUserId: string; sdp: any },
+    @MessageBody()
+    data: {
+      roomId: string;
+      targetUserId: string;
+      sdp: any;
+      streamMeta?: Record<string, string>;
+    },
   ) {
     const targetPeer = this.findPeerSocket(data.roomId, data.targetUserId);
     if (targetPeer) {
@@ -142,6 +168,7 @@ export class SignalingGateway
         roomId: data.roomId,
         fromUserId: client.data.userId,
         sdp: data.sdp,
+        streamMeta: data.streamMeta,
       });
     }
   }
@@ -185,6 +212,51 @@ export class SignalingGateway
     }
   }
 
+  @SubscribeMessage(SIGNAL_EVENTS.MEDIA_STATE)
+  handleMediaState(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody()
+    data: { roomId: string; isCameraOn: boolean; isScreenSharing: boolean },
+  ) {
+    const userId = client.data.userId;
+    const { roomId, isCameraOn, isScreenSharing } = data;
+
+    // Enforce single screen share per room
+    if (isScreenSharing) {
+      const currentSharer = this.roomScreenSharer.get(roomId);
+      if (currentSharer && currentSharer !== userId) {
+        client.emit('signal:error', {
+          message: 'Another user is already sharing their screen',
+        });
+        return;
+      }
+      this.roomScreenSharer.set(roomId, userId);
+    } else {
+      const currentSharer = this.roomScreenSharer.get(roomId);
+      if (currentSharer === userId) {
+        this.roomScreenSharer.delete(roomId);
+      }
+    }
+
+    // Update peer state
+    const peers = this.roomPeers.get(roomId);
+    if (peers) {
+      const peer = peers.get(userId);
+      if (peer) {
+        peer.isCameraOn = isCameraOn;
+        peer.isScreenSharing = isScreenSharing;
+      }
+    }
+
+    // Broadcast to others
+    client.to(`signal:${roomId}`).emit(SIGNAL_EVENTS.MEDIA_STATE, {
+      roomId,
+      userId,
+      isCameraOn,
+      isScreenSharing,
+    });
+  }
+
   @SubscribeMessage(SIGNAL_EVENTS.LEAVE_ROOM)
   handleLeaveRoom(@ConnectedSocket() client: AuthenticatedSocket) {
     const roomId = this.socketToRoom.get(client.id);
@@ -195,10 +267,25 @@ export class SignalingGateway
 
   private removePeer(roomId: string, client: AuthenticatedSocket) {
     const userId = client.data.userId;
+
+    // Clean up screen share if this peer was sharing
+    if (this.roomScreenSharer.get(roomId) === userId) {
+      this.roomScreenSharer.delete(roomId);
+      this.server.to(`signal:${roomId}`).emit(SIGNAL_EVENTS.MEDIA_STATE, {
+        roomId,
+        userId,
+        isCameraOn: false,
+        isScreenSharing: false,
+      });
+    }
+
     const peers = this.roomPeers.get(roomId);
     if (peers) {
       peers.delete(userId);
-      if (peers.size === 0) this.roomPeers.delete(roomId);
+      if (peers.size === 0) {
+        this.roomPeers.delete(roomId);
+        this.roomScreenSharer.delete(roomId);
+      }
     }
     this.socketToRoom.delete(client.id);
     client.leave(`signal:${roomId}`);

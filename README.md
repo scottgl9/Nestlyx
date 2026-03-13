@@ -7,6 +7,8 @@ Nestlyx is an open-source, self-hosted meeting platform with real-time chat, voi
 - **Workspaces** — Organize teams and meetings
 - **Rooms** — Create meeting rooms with invite links
 - **Voice Calls** — WebRTC-based peer-to-peer audio
+- **Camera Video** — Toggle camera on/off during meetings with video tile grid
+- **Screen Sharing** — Share your screen with participants (one at a time per room)
 - **Chat** — Real-time messaging (workspace and room-scoped)
 - **Recording** — Client-side audio recording with upload
 - **Auth** — JWT-based authentication

@@ -43,7 +43,7 @@ docker compose up   # postgres + redis + api + web
 
 - REST API for CRUD, WebSocket (Socket.IO) for real-time chat and WebRTC signaling
 - Socket.IO namespaces: `/chat` and `/signaling`
-- WebRTC mesh topology for voice (no SFU)
+- WebRTC mesh topology for voice, camera video, and screen sharing (no SFU)
 - Client-side MediaRecorder for recording, uploaded to API
 - JWT auth on both HTTP and WebSocket
 

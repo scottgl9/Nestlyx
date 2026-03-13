@@ -122,6 +122,8 @@ export interface PeerInfo {
   userId: string;
   displayName: string;
   isMuted: boolean;
+  isCameraOn?: boolean;
+  isScreenSharing?: boolean;
 }
 
 // ── Agent ────────────────────────────────────────────

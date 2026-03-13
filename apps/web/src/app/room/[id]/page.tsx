@@ -6,10 +6,11 @@ import { useAuth } from '@/hooks/use-auth';
 import { useWebRTC } from '@/hooks/use-webrtc';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
-import { Avatar } from '@/components/ui/avatar';
 import { ChatPanel } from '@/components/chat-panel';
-import { RecordingControls } from '@/components/recording-controls';
 import { AudioStream } from '@/components/audio-stream';
+import { VideoTile } from '@/components/video-tile';
+import { ScreenShareView } from '@/components/screen-share-view';
+import { MeetingControls } from '@/components/meeting-controls';
 
 interface RoomData {
   id: string;
@@ -31,9 +32,22 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const [room, setRoom] = useState<RoomData | null>(null);
   const [joined, setJoined] = useState(false);
   const [showChat, setShowChat] = useState(true);
-  const { peers, peerConnections, isMuted, joinRoom, leaveRoom, toggleMute } = useWebRTC(
-    joined ? id : null,
-  );
+
+  const {
+    peers,
+    peerConnections,
+    isMuted,
+    isCameraOn,
+    isScreenSharing,
+    localVideoStream,
+    localScreenStream,
+    screenShareUserId,
+    joinRoom,
+    leaveRoom,
+    toggleMute,
+    toggleCamera,
+    toggleScreenShare,
+  } = useWebRTC(joined ? id : null);
 
   useEffect(() => {
     api.get<RoomData>(`/rooms/${id}`).then(setRoom);
@@ -70,6 +84,32 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     );
   }
 
+  // Find screen share stream
+  const hasScreenShare = screenShareUserId !== null;
+  let screenStream: MediaStream | undefined;
+  let screenSharerName = '';
+
+  if (screenShareUserId === 'self') {
+    screenStream = localScreenStream ?? undefined;
+    screenSharerName = 'You';
+  } else if (screenShareUserId) {
+    const sharerPeer = peerConnections.get(screenShareUserId);
+    screenStream = sharerPeer?.screenStream;
+    const sharerInfo = peers.find((p) => p.userId === screenShareUserId);
+    screenSharerName = sharerInfo?.displayName ?? screenShareUserId;
+  }
+
+  // Determine grid columns based on participant count
+  const totalParticipants = peers.length + 1;
+  const gridCols =
+    totalParticipants <= 1
+      ? 'grid-cols-1'
+      : totalParticipants <= 4
+        ? 'grid-cols-2'
+        : totalParticipants <= 9
+          ? 'grid-cols-2 sm:grid-cols-3'
+          : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
+
   return (
     <div className="flex h-screen flex-col">
       {/* Header */}
@@ -88,63 +128,91 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           >
             {showChat ? 'Hide Chat' : 'Show Chat'}
           </Button>
-          <Button variant="danger" size="sm" onClick={handleLeave}>
-            Leave
-          </Button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Participants */}
+        {/* Main content */}
         <main className="flex flex-1 flex-col">
-          <div className="flex-1 p-6">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {/* Self */}
-              <div className="flex flex-col items-center rounded-xl border bg-white p-4">
-                <Avatar name={user?.displayName || 'You'} size="lg" />
-                <p className="mt-2 text-sm font-medium">You</p>
-                <p className="text-xs text-gray-500">
-                  {isMuted ? 'Muted' : 'Unmuted'}
-                </p>
-              </div>
-
-              {/* Peers */}
-              {peers.map((peer) => (
-                <div
-                  key={peer.userId}
-                  className="flex flex-col items-center rounded-xl border bg-white p-4"
-                >
-                  <div className="relative">
-                    <Avatar name={peer.displayName} size="lg" />
-                    {(peer as any).isBot && (
-                      <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-indigo-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                        BOT
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-2 text-sm font-medium">{peer.displayName}</p>
-                  <p className="text-xs text-gray-500">
-                    {(peer as any).isBot ? 'Agent' : peer.isMuted ? 'Muted' : 'Unmuted'}
-                  </p>
+          <div className="flex-1 overflow-auto p-4">
+            {hasScreenShare && screenStream ? (
+              /* Presentation layout */
+              <div className="flex h-full gap-4">
+                <div className="flex-[3]">
+                  <ScreenShareView
+                    stream={screenStream}
+                    sharerName={screenSharerName}
+                  />
                 </div>
-              ))}
-            </div>
+                <div className="flex flex-[1] flex-col gap-3 overflow-auto">
+                  {/* Self tile */}
+                  <VideoTile
+                    stream={localVideoStream}
+                    displayName={user?.displayName || 'You'}
+                    isMuted={isMuted}
+                    isCameraOn={isCameraOn}
+                    isSelf
+                  />
+                  {/* Peer tiles */}
+                  {peers.map((peer) => {
+                    const pc = peerConnections.get(peer.userId);
+                    return (
+                      <VideoTile
+                        key={peer.userId}
+                        stream={pc?.videoStream}
+                        displayName={peer.displayName}
+                        isMuted={peer.isMuted}
+                        isCameraOn={peer.isCameraOn ?? false}
+                        isBot={(peer as any).isBot}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* Grid layout */
+              <div className={`grid ${gridCols} gap-4`}>
+                {/* Self tile */}
+                <VideoTile
+                  stream={localVideoStream}
+                  displayName={user?.displayName || 'You'}
+                  isMuted={isMuted}
+                  isCameraOn={isCameraOn}
+                  isSelf
+                />
+                {/* Peer tiles */}
+                {peers.map((peer) => {
+                  const pc = peerConnections.get(peer.userId);
+                  return (
+                    <VideoTile
+                      key={peer.userId}
+                      stream={pc?.videoStream}
+                      displayName={peer.displayName}
+                      isMuted={peer.isMuted}
+                      isCameraOn={peer.isCameraOn ?? false}
+                      isBot={(peer as any).isBot}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Controls */}
-          <div className="flex items-center justify-center gap-4 border-t bg-white px-6 py-4">
-            <Button
-              variant={isMuted ? 'danger' : 'secondary'}
-              onClick={toggleMute}
-            >
-              {isMuted ? 'Unmute' : 'Mute'}
-            </Button>
-            <RecordingControls
-              roomId={id}
-              peerConnections={peerConnections}
-              localDisplayName={user?.displayName || 'You'}
-            />
-          </div>
+          <MeetingControls
+            roomId={id}
+            isMuted={isMuted}
+            isCameraOn={isCameraOn}
+            isScreenSharing={isScreenSharing}
+            screenShareUserId={screenShareUserId}
+            selfUserId={user?.id}
+            peerConnections={peerConnections}
+            localDisplayName={user?.displayName || 'You'}
+            onToggleMute={toggleMute}
+            onToggleCamera={toggleCamera}
+            onToggleScreenShare={toggleScreenShare}
+            onLeave={handleLeave}
+          />
         </main>
 
         {/* Chat sidebar */}

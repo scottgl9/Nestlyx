@@ -27,12 +27,14 @@ export interface SignalOfferEvent {
   roomId: string;
   targetUserId: string;
   sdp: RTCSessionDescriptionInit;
+  streamMeta?: Record<string, string>;
 }
 
 export interface SignalAnswerEvent {
   roomId: string;
   targetUserId: string;
   sdp: RTCSessionDescriptionInit;
+  streamMeta?: Record<string, string>;
 }
 
 export interface SignalIceCandidateEvent {
@@ -59,4 +61,11 @@ export interface SignalMuteToggleEvent {
 export interface SignalRoomPeersEvent {
   roomId: string;
   peers: PeerInfo[];
+}
+
+export interface SignalMediaStateEvent {
+  roomId: string;
+  userId: string;
+  isCameraOn: boolean;
+  isScreenSharing: boolean;
 }
