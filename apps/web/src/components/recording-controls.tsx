@@ -73,15 +73,66 @@ export function RecordingControls({ roomId }: RecordingControlsProps) {
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
+    setLastRecordingId(recordingId);
     setRecordingId(null);
-  }, []);
+  }, [recordingId]);
+
+  const [lastRecordingId, setLastRecordingId] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcription, setTranscription] = useState<string | null>(null);
+
+  const startTranscription = useCallback(async () => {
+    if (!lastRecordingId) return;
+    setTranscribing(true);
+    setTranscription(null);
+    try {
+      const { id } = await api.post<{ id: string }>(
+        `/transcriptions/recording/${lastRecordingId}`,
+      );
+      // Poll for completion
+      const poll = async () => {
+        const result = await api.get<{ status: string; text: string | null }>(
+          `/transcriptions/${id}`,
+        );
+        if (result.status === 'COMPLETED') {
+          setTranscription(result.text);
+          setTranscribing(false);
+        } else if (result.status === 'FAILED') {
+          setTranscription('Transcription failed');
+          setTranscribing(false);
+        } else {
+          setTimeout(poll, 2000);
+        }
+      };
+      setTimeout(poll, 3000);
+    } catch (err) {
+      console.error('Transcription failed:', err);
+      setTranscribing(false);
+    }
+  }, [lastRecordingId]);
 
   return (
-    <Button
-      variant={isRecording ? 'danger' : 'secondary'}
-      onClick={isRecording ? stopRecording : startRecording}
-    >
-      {isRecording ? 'Stop Recording' : 'Record'}
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        variant={isRecording ? 'danger' : 'secondary'}
+        onClick={isRecording ? stopRecording : startRecording}
+      >
+        {isRecording ? 'Stop Recording' : 'Record'}
+      </Button>
+      {lastRecordingId && !isRecording && (
+        <Button
+          variant="secondary"
+          onClick={startTranscription}
+          disabled={transcribing}
+        >
+          {transcribing ? 'Transcribing...' : 'Transcribe'}
+        </Button>
+      )}
+      {transcription && (
+        <span className="max-w-xs truncate text-xs text-gray-600" title={transcription}>
+          {transcription}
+        </span>
+      )}
+    </div>
   );
 }

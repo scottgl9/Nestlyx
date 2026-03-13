@@ -9,6 +9,7 @@ import { RoomsModule } from './rooms/rooms.module';
 import { ChatModule } from './chat/chat.module';
 import { SignalingModule } from './signaling/signaling.module';
 import { RecordingModule } from './recording/recording.module';
+import { TranscriptionModule } from './transcription/transcription.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
@@ -22,6 +23,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     ChatModule,
     SignalingModule,
     RecordingModule,
+    TranscriptionModule,
   ],
   providers: [
     {

@@ -3,6 +3,7 @@ import {
   WorkspaceRole,
   RoomStatus,
   RecordingStatus,
+  TranscriptionStatus,
   MeetingEventType,
 } from './enums';
 
@@ -86,6 +87,26 @@ export interface MeetingEvent {
   actorId: string | null;
   metadata: Record<string, unknown>;
   createdAt: Date;
+}
+
+// ── Transcription ─────────────────────────────────────
+export interface Transcription {
+  id: string;
+  recordingId: string;
+  status: TranscriptionStatus;
+  language: string | null;
+  text: string | null;
+  segments: TranscriptionSegment[] | null;
+  model: string;
+  error: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TranscriptionSegment {
+  start: number;
+  end: number;
+  text: string;
 }
 
 // ── Signaling ─────────────────────────────────────────

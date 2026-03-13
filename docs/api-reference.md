@@ -107,6 +107,36 @@ Download a recording file.
 
 ---
 
+## Transcriptions (Whisper STT)
+
+### POST /transcriptions/recording/:recordingId
+Start transcribing a recording using local Whisper. Returns immediately with a transcription entry in `PROCESSING` status. The transcription runs asynchronously.
+
+**Response:** `{ "id": "...", "recordingId": "...", "status": "PROCESSING", "model": "base" }`
+
+### GET /transcriptions/:id
+Get transcription status and result.
+
+**Response:**
+```json
+{
+  "id": "...",
+  "recordingId": "...",
+  "status": "COMPLETED",
+  "language": "en",
+  "text": "Hello world, this is the transcribed text.",
+  "segments": [{ "start": 0.0, "end": 2.5, "text": "Hello world" }],
+  "model": "base"
+}
+```
+
+Status values: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
+
+### GET /transcriptions/recording/:recordingId
+List all transcriptions for a recording.
+
+---
+
 ## WebSocket Events
 
 ### Chat Namespace (`/chat`)

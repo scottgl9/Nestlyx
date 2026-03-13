@@ -116,10 +116,28 @@ model Recording {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room           Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transcriptions Transcription[]
 
   @@map("recordings")
+}
+
+model Transcription {
+  id          String   @id @default(uuid())
+  recordingId String
+  status      String   @default("PENDING")
+  language    String?
+  text        String?
+  segments    Json?
+  model       String   @default("base")
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+
+  @@map("transcriptions")
 }
 
 model MeetingEvent {

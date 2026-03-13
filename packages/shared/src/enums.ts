@@ -23,6 +23,13 @@ export enum RecordingStatus {
   FAILED = 'FAILED',
 }
 
+export enum TranscriptionStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
 export enum MeetingEventType {
   ROOM_CREATED = 'ROOM_CREATED',
   ROOM_STARTED = 'ROOM_STARTED',
