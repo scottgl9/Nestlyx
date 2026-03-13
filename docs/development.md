@@ -4,6 +4,7 @@
 
 - Node.js 20+
 - Docker and Docker Compose (for PostgreSQL and Redis)
+- FFmpeg (required for Whisper STT transcription)
 
 ## Setup
 
@@ -44,7 +45,8 @@ Nestlyx/
 │       ├── rooms/        # Room lifecycle
 │       ├── chat/         # WebSocket chat gateway
 │       ├── signaling/    # WebRTC signaling gateway
-│       ├── recording/    # Recording management
+│       ├── recording/    # Recording management and speaker track upload
+│       ├── transcription/ # Whisper STT transcription
 │       └── prisma/       # Database service
 └── apps/web/             # Next.js frontend
     └── src/

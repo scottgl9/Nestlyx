@@ -132,7 +132,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             >
               {isMuted ? 'Unmute' : 'Mute'}
             </Button>
-            <RecordingControls roomId={id} />
+            <RecordingControls
+              roomId={id}
+              peerConnections={peerConnections}
+              localDisplayName={user?.displayName || 'You'}
+            />
           </div>
         </main>
 

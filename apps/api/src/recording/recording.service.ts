@@ -46,6 +46,37 @@ export class RecordingService {
     });
   }
 
+  async uploadSpeakerTrack(
+    recordingId: string,
+    file: Express.Multer.File,
+    userId: string,
+    speakerName: string,
+  ) {
+    const recording = await this.prisma.recording.findUnique({
+      where: { id: recordingId },
+    });
+    if (!recording) throw new NotFoundException('Recording not found');
+
+    const filename = `recordings/${recording.roomId}/${recordingId}/speaker-${userId}.webm`;
+    const filePath = await this.storage.save(filename, file.buffer);
+
+    return this.prisma.speakerTrack.create({
+      data: {
+        recordingId,
+        userId,
+        speakerName,
+        filePath,
+        fileSize: file.size,
+      },
+    });
+  }
+
+  async getSpeakerTracks(recordingId: string) {
+    return this.prisma.speakerTrack.findMany({
+      where: { recordingId },
+    });
+  }
+
   async listByRoom(roomId: string) {
     return this.prisma.recording.findMany({
       where: { roomId },

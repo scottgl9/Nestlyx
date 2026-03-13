@@ -4,82 +4,211 @@ import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api-client';
 
-interface RecordingControlsProps {
-  roomId: string;
+interface PeerRecorder {
+  userId: string;
+  displayName: string;
+  recorder: MediaRecorder;
+  chunks: Blob[];
 }
 
-export function RecordingControls({ roomId }: RecordingControlsProps) {
+interface RecordingControlsProps {
+  roomId: string;
+  peerConnections?: Map<string, { userId: string; displayName: string; stream?: MediaStream }>;
+  localDisplayName?: string;
+}
+
+export function RecordingControls({
+  roomId,
+  peerConnections,
+  localDisplayName = 'You',
+}: RecordingControlsProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingId, setRecordingId] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const [lastRecordingId, setLastRecordingId] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcription, setTranscription] = useState<string | null>(null);
+
+  // Mixed recording (fallback)
+  const mixedRecorderRef = useRef<MediaRecorder | null>(null);
+  const mixedChunksRef = useRef<Blob[]>([]);
+
+  // Per-speaker recorders
+  const speakerRecordersRef = useRef<PeerRecorder[]>([]);
+  const localRecorderRef = useRef<{ recorder: MediaRecorder; chunks: Blob[] } | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const localMicStreamRef = useRef<MediaStream | null>(null);
 
   const startRecording = useCallback(async () => {
     try {
-      // Create recording entry on server
       const rec = await api.post<{ id: string }>(`/recordings/start/${roomId}`);
       setRecordingId(rec.id);
 
-      // Capture audio from all audio elements on the page
       const audioContext = new AudioContext();
-      const destination = audioContext.createMediaStreamDestination();
+      audioContextRef.current = audioContext;
 
-      // Get local mic audio
+      // Record local mic as a separate speaker track
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localMicStreamRef.current = micStream;
+
+      const localRec = new MediaRecorder(micStream, {
+        mimeType: 'audio/webm;codecs=opus',
+      });
+      const localChunks: Blob[] = [];
+      localRec.ondataavailable = (e) => {
+        if (e.data.size > 0) localChunks.push(e.data);
+      };
+      localRecorderRef.current = { recorder: localRec, chunks: localChunks };
+      localRec.start(1000);
+
+      // Record each remote peer as a separate speaker track
+      const peerRecorders: PeerRecorder[] = [];
+      if (peerConnections) {
+        for (const [userId, peer] of peerConnections.entries()) {
+          if (!peer.stream) continue;
+          try {
+            const peerRec = new MediaRecorder(peer.stream, {
+              mimeType: 'audio/webm;codecs=opus',
+            });
+            const chunks: Blob[] = [];
+            peerRec.ondataavailable = (e) => {
+              if (e.data.size > 0) chunks.push(e.data);
+            };
+            peerRecorders.push({
+              userId,
+              displayName: peer.displayName || userId,
+              recorder: peerRec,
+              chunks,
+            });
+            peerRec.start(1000);
+          } catch {
+            // Peer stream may not be available yet
+          }
+        }
+      }
+      speakerRecordersRef.current = peerRecorders;
+
+      // Also record mixed audio as fallback
+      const destination = audioContext.createMediaStreamDestination();
       const micSource = audioContext.createMediaStreamSource(micStream);
       micSource.connect(destination);
 
-      // Capture remote audio from audio elements
-      const audioElements = document.querySelectorAll('audio');
-      audioElements.forEach((el) => {
+      document.querySelectorAll('audio').forEach((el) => {
         try {
           const source = audioContext.createMediaElementSource(el as HTMLAudioElement);
           source.connect(destination);
           source.connect(audioContext.destination);
         } catch {
-          // Element may already be connected
+          // Already connected
         }
       });
 
-      const mediaRecorder = new MediaRecorder(destination.stream, {
+      const mixedRecorder = new MediaRecorder(destination.stream, {
         mimeType: 'audio/webm;codecs=opus',
       });
-
-      chunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+      mixedChunksRef.current = [];
+      mixedRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) mixedChunksRef.current.push(e.data);
       };
 
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+      mixedRecorder.onstop = async () => {
+        // Upload mixed recording
+        const blob = new Blob(mixedChunksRef.current, { type: 'audio/webm' });
         if (rec.id) {
           await api.post(`/recordings/${rec.id}/stop`);
           await api.uploadFile(`/recordings/${rec.id}/upload`, blob);
         }
-        micStream.getTracks().forEach((t) => t.stop());
-        audioContext.close();
       };
 
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start(1000);
+      mixedRecorderRef.current = mixedRecorder;
+      mixedRecorder.start(1000);
       setIsRecording(true);
     } catch (err) {
       console.error('Failed to start recording:', err);
     }
-  }, [roomId]);
+  }, [roomId, peerConnections]);
 
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+  const stopRecording = useCallback(async () => {
+    const currentRecId = recordingId;
+
+    // Stop mixed recorder
+    if (mixedRecorderRef.current && mixedRecorderRef.current.state !== 'inactive') {
+      mixedRecorderRef.current.stop();
     }
-    setIsRecording(false);
-    setLastRecordingId(recordingId);
-    setRecordingId(null);
-  }, [recordingId]);
 
-  const [lastRecordingId, setLastRecordingId] = useState<string | null>(null);
-  const [transcribing, setTranscribing] = useState(false);
-  const [transcription, setTranscription] = useState<string | null>(null);
+    // Stop and upload local speaker track
+    if (localRecorderRef.current) {
+      const { recorder, chunks } = localRecorderRef.current;
+      await new Promise<void>((resolve) => {
+        recorder.onstop = async () => {
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          if (currentRecId) {
+            const formData = new FormData();
+            formData.append('file', blob);
+            formData.append('userId', 'self');
+            formData.append('speakerName', localDisplayName);
+            await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/recordings/${currentRecId}/upload-speaker-track`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${getToken()}`,
+                },
+                body: formData,
+              },
+            ).catch(() => {});
+          }
+          resolve();
+        };
+        if (recorder.state !== 'inactive') recorder.stop();
+        else resolve();
+      });
+    }
+
+    // Stop and upload each peer speaker track
+    for (const peer of speakerRecordersRef.current) {
+      await new Promise<void>((resolve) => {
+        peer.recorder.onstop = async () => {
+          const blob = new Blob(peer.chunks, { type: 'audio/webm' });
+          if (currentRecId) {
+            const formData = new FormData();
+            formData.append('file', blob);
+            formData.append('userId', peer.userId);
+            formData.append('speakerName', peer.displayName);
+            await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/recordings/${currentRecId}/upload-speaker-track`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${getToken()}`,
+                },
+                body: formData,
+              },
+            ).catch(() => {});
+          }
+          resolve();
+        };
+        if (peer.recorder.state !== 'inactive') peer.recorder.stop();
+        else resolve();
+      });
+    }
+
+    // Cleanup
+    if (localMicStreamRef.current) {
+      localMicStreamRef.current.getTracks().forEach((t) => t.stop());
+      localMicStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    speakerRecordersRef.current = [];
+    localRecorderRef.current = null;
+
+    setIsRecording(false);
+    setLastRecordingId(currentRecId);
+    setRecordingId(null);
+  }, [recordingId, localDisplayName]);
 
   const startTranscription = useCallback(async () => {
     if (!lastRecordingId) return;
@@ -89,7 +218,6 @@ export function RecordingControls({ roomId }: RecordingControlsProps) {
       const { id } = await api.post<{ id: string }>(
         `/transcriptions/recording/${lastRecordingId}`,
       );
-      // Poll for completion
       const poll = async () => {
         const result = await api.get<{ status: string; text: string | null }>(
           `/transcriptions/${id}`,
@@ -135,4 +263,16 @@ export function RecordingControls({ roomId }: RecordingControlsProps) {
       )}
     </div>
   );
+}
+
+function getToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const stored = localStorage.getItem('auth-storage');
+    if (!stored) return '';
+    const parsed = JSON.parse(stored);
+    return parsed?.state?.token || '';
+  } catch {
+    return '';
+  }
 }

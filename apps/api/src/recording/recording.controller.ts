@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Param,
+  Body,
   Request,
   Res,
   UploadedFile,
@@ -34,6 +35,21 @@ export class RecordingController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.recordingService.uploadRecording(id, file);
+  }
+
+  @Post(':id/upload-speaker-track')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 500 * 1024 * 1024 } }))
+  async uploadSpeakerTrack(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { userId: string; speakerName: string },
+  ) {
+    return this.recordingService.uploadSpeakerTrack(
+      id,
+      file,
+      body.userId,
+      body.speakerName,
+    );
   }
 
   @Get('room/:roomId')

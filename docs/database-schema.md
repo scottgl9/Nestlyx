@@ -13,6 +13,8 @@ Room 1──* Participant
 Room 1──* ChatMessage
 Room 1──* Recording
 Room 1──* MeetingEvent
+Recording 1──* SpeakerTrack
+Recording 1──* Transcription
 ```
 
 ## Models
@@ -94,6 +96,35 @@ Indexes: (workspaceId, createdAt), (roomId, createdAt)
 | duration | Int? | Seconds |
 | createdAt | DateTime | |
 | updatedAt | DateTime | |
+
+### SpeakerTrack
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| recordingId | UUID | FK → Recording |
+| userId | String | ID of the speaker |
+| speakerName | String | Display name used as transcript label |
+| filePath | String? | Storage path to the audio file |
+| fileSize | Int? | Bytes |
+| createdAt | DateTime | |
+
+One row per participant per recording. Used by `TranscriptionService` to produce speaker-attributed transcripts.
+
+### Transcription
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| recordingId | UUID | FK → Recording |
+| status | String | PENDING, PROCESSING, COMPLETED, FAILED |
+| language | String? | Detected or specified language code |
+| text | String? | Full transcript text |
+| segments | JSON? | Array of `{ start, end, text, speaker? }` objects |
+| model | String | Whisper model name used (default: `base`) |
+| error | String? | Error message if status is FAILED |
+| createdAt | DateTime | |
+| updatedAt | DateTime | |
+
+When speaker tracks are present, `text` contains `[SpeakerName]`-labeled turns and `segments` includes a `speaker` field on each segment. Language is detected by Whisper from the first speaker track processed.
 
 ### MeetingEvent
 | Column | Type | Notes |

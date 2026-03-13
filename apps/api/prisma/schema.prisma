@@ -119,8 +119,23 @@ model Recording {
   room           Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   transcriptions Transcription[]
+  speakerTracks  SpeakerTrack[]
 
   @@map("recordings")
+}
+
+model SpeakerTrack {
+  id          String   @id @default(uuid())
+  recordingId String
+  userId      String
+  speakerName String
+  filePath    String?
+  fileSize    Int?
+  createdAt   DateTime @default(now())
+
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+
+  @@map("speaker_tracks")
 }
 
 model Transcription {

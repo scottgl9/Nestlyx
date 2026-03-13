@@ -95,9 +95,22 @@ Start a recording session.
 Stop a recording session.
 
 ### POST /recordings/:id/upload
-Upload the recorded audio file.
+Upload the recorded audio file (mixed track).
 
-**Body:** multipart/form-data with `file` field.
+**Body:** multipart/form-data with `file` field (max 500 MB). Sets recording status to `COMPLETED`.
+
+### POST /recordings/:id/upload-speaker-track
+Upload a per-speaker audio track for a recording. Creates a `SpeakerTrack` record. Multiple tracks can be uploaded for the same recording (one per participant). When transcription is triggered, these tracks are used for speaker-attributed transcription instead of the mixed file.
+
+**Body:** multipart/form-data
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | File | Audio file (max 500 MB) |
+| `userId` | string | ID of the speaker |
+| `speakerName` | string | Display name used as the speaker label in the transcript |
+
+**Response:** The created `SpeakerTrack` record.
 
 ### GET /recordings/room/:roomId
 List recordings for a room.

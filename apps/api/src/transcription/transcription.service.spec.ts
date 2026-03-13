@@ -38,10 +38,11 @@ describe('TranscriptionService', () => {
   });
 
   describe('transcribeRecording', () => {
-    it('should create a transcription entry and start processing', async () => {
+    it('should create a transcription entry and start processing (mixed audio)', async () => {
       prisma.recording.findUnique.mockResolvedValue({
         id: 'rec1',
         filePath: '/uploads/test.webm',
+        speakerTracks: [],
       });
       prisma.transcription.create.mockResolvedValue({
         id: 'trans1',
@@ -68,6 +69,38 @@ describe('TranscriptionService', () => {
       });
     });
 
+    it('should use speaker tracks when available', async () => {
+      prisma.recording.findUnique.mockResolvedValue({
+        id: 'rec1',
+        filePath: '/uploads/mixed.webm',
+        speakerTracks: [
+          { userId: 'user1', speakerName: 'Alice', filePath: '/uploads/speaker-user1.webm' },
+          { userId: 'user2', speakerName: 'Bob', filePath: '/uploads/speaker-user2.webm' },
+        ],
+      });
+      prisma.transcription.create.mockResolvedValue({
+        id: 'trans1',
+        recordingId: 'rec1',
+        status: 'PROCESSING',
+        model: 'base',
+      });
+      whisper.transcribe
+        .mockResolvedValueOnce({
+          text: 'Hello from Alice',
+          segments: [{ start: 0, end: 2, text: 'Hello from Alice' }],
+          language: 'en',
+        })
+        .mockResolvedValueOnce({
+          text: 'Hello from Bob',
+          segments: [{ start: 1, end: 3, text: 'Hello from Bob' }],
+          language: 'en',
+        });
+      prisma.transcription.update.mockResolvedValue({});
+
+      const result = await service.transcribeRecording('rec1');
+      expect(result.status).toBe('PROCESSING');
+    });
+
     it('should throw NotFoundException if recording not found', async () => {
       prisma.recording.findUnique.mockResolvedValue(null);
 
@@ -76,10 +109,11 @@ describe('TranscriptionService', () => {
       );
     });
 
-    it('should throw if recording has no file', async () => {
+    it('should throw if recording has no file and no speaker tracks', async () => {
       prisma.recording.findUnique.mockResolvedValue({
         id: 'rec1',
         filePath: null,
+        speakerTracks: [],
       });
 
       await expect(service.transcribeRecording('rec1')).rejects.toThrow(

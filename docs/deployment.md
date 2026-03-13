@@ -43,6 +43,33 @@ The default config uses Google's public STUN server, which works for peers on th
 ]
 ```
 
+### Whisper STT Setup
+
+Transcription uses [nodejs-whisper](https://github.com/ChetanXpro/nodejs-whisper) (whisper.cpp). Two requirements:
+
+**FFmpeg** must be installed and available on the system PATH:
+```bash
+# Debian/Ubuntu
+apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+```
+
+**Whisper model** must be downloaded before transcription requests are made:
+```bash
+cd apps/api
+npx nodejs-whisper download
+```
+
+The model is configured via the `WHISPER_MODEL` environment variable (default: `base`). Available models: `tiny`, `base`, `small`, `medium`, `large`. Larger models produce better accuracy at the cost of speed and disk space.
+
+```env
+WHISPER_MODEL=base
+```
+
+The model files are stored in the `nodejs-whisper` package directory inside `node_modules`.
+
 ### Recording Storage
 For production, configure S3 storage:
 ```env
