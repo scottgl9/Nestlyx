@@ -12,6 +12,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { SIGNALING_NAMESPACE, SIGNAL_EVENTS } from '@nestlyx/shared';
 import { RoomsService } from '../rooms/rooms.service';
+import { UsersService } from '../users/users.service';
 
 interface AuthenticatedSocket extends Socket {
   data: { userId: string; displayName?: string };
@@ -37,6 +38,7 @@ export class SignalingGateway
   constructor(
     private jwtService: JwtService,
     private roomsService: RoomsService,
+    private usersService: UsersService,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -50,7 +52,8 @@ export class SignalingGateway
       }
       const payload = this.jwtService.verify(token);
       client.data.userId = payload.sub;
-      client.data.displayName = payload.displayName || payload.email;
+      const user = await this.usersService.findById(payload.sub);
+      client.data.displayName = user?.displayName || payload.email;
       this.logger.log(`Signaling client connected: ${payload.sub}`);
     } catch {
       client.disconnect();

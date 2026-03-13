@@ -3,10 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SignalingGateway } from './signaling.gateway';
 import { RoomsModule } from '../rooms/rooms.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     RoomsModule,
+    UsersModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

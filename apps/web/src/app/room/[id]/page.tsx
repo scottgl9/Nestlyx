@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { ChatPanel } from '@/components/chat-panel';
 import { RecordingControls } from '@/components/recording-controls';
+import { AudioStream } from '@/components/audio-stream';
 
 interface RoomData {
   id: string;
@@ -30,7 +31,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const [room, setRoom] = useState<RoomData | null>(null);
   const [joined, setJoined] = useState(false);
   const [showChat, setShowChat] = useState(true);
-  const { peers, isMuted, joinRoom, leaveRoom, toggleMute } = useWebRTC(
+  const { peers, peerConnections, isMuted, joinRoom, leaveRoom, toggleMute } = useWebRTC(
     joined ? id : null,
   );
 
@@ -142,6 +143,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           </div>
         )}
       </div>
+
+      {/* Remote audio streams */}
+      {Array.from(peerConnections.entries()).map(([userId, peer]) =>
+        peer.stream ? <AudioStream key={userId} stream={peer.stream} /> : null,
+      )}
     </div>
   );
 }

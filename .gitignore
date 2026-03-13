@@ -137,3 +137,26 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Build output
+apps/api/dist/
+packages/shared/dist/
+
+# Uploads / recordings
+uploads/
+*.webm
+
+# Whisper models
+models/
+*.bin
+*.pt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
