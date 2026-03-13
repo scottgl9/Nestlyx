@@ -41,8 +41,17 @@ export function useWebRTC(roomId: string | null) {
   const localStreamRef = useRef<MediaStream | null>(null);
   const localVideoStreamRef = useRef<MediaStream | null>(null);
   const localScreenStreamRef = useRef<MediaStream | null>(null);
+  // Refs to avoid stale closures in onended and toggle callbacks
+  const isCameraOnRef = useRef(false);
+  const isScreenSharingRef = useRef(false);
+  const peersRef = useRef<PeerInfo[]>([]);
   // Store streamMeta received from peers for ontrack routing
   const peerStreamMeta = useRef<Map<string, Record<string, string>>>(new Map());
+
+  // Keep peersRef in sync with state
+  useEffect(() => {
+    peersRef.current = peers;
+  }, [peers]);
 
   const buildStreamMeta = useCallback((): Record<string, string> => {
     const meta: Record<string, string> = {};
@@ -172,12 +181,13 @@ export function useWebRTC(roomId: string | null) {
       localVideoStreamRef.current = null;
       setLocalVideoStream(null);
       setIsCameraOn(false);
+      isCameraOnRef.current = false;
 
       await renegotiateAll();
       emit(SIGNAL_EVENTS.MEDIA_STATE, {
         roomId,
         isCameraOn: false,
-        isScreenSharing: isScreenSharing,
+        isScreenSharing: isScreenSharingRef.current,
       });
     } else {
       // Turn on camera
@@ -186,6 +196,7 @@ export function useWebRTC(roomId: string | null) {
         localVideoStreamRef.current = stream;
         setLocalVideoStream(stream);
         setIsCameraOn(true);
+        isCameraOnRef.current = true;
 
         // Add tracks to all peers
         for (const [, peer] of peerConnections.current.entries()) {
@@ -198,13 +209,13 @@ export function useWebRTC(roomId: string | null) {
         emit(SIGNAL_EVENTS.MEDIA_STATE, {
           roomId,
           isCameraOn: true,
-          isScreenSharing: isScreenSharing,
+          isScreenSharing: isScreenSharingRef.current,
         });
       } catch (err) {
         console.error('Failed to get camera:', err);
       }
     }
-  }, [roomId, emit, isScreenSharing, renegotiateAll]);
+  }, [roomId, emit, renegotiateAll]);
 
   const toggleScreenShare = useCallback(async () => {
     if (!roomId) return;
@@ -226,12 +237,13 @@ export function useWebRTC(roomId: string | null) {
       localScreenStreamRef.current = null;
       setLocalScreenStream(null);
       setIsScreenSharing(false);
+      isScreenSharingRef.current = false;
       setScreenShareUserId(null);
 
       await renegotiateAll();
       emit(SIGNAL_EVENTS.MEDIA_STATE, {
         roomId,
-        isCameraOn: isCameraOn,
+        isCameraOn: isCameraOnRef.current,
         isScreenSharing: false,
       });
     } else {
@@ -241,6 +253,7 @@ export function useWebRTC(roomId: string | null) {
         localScreenStreamRef.current = stream;
         setLocalScreenStream(stream);
         setIsScreenSharing(true);
+        isScreenSharingRef.current = true;
         setScreenShareUserId('self');
 
         // Add tracks to all peers
@@ -255,6 +268,7 @@ export function useWebRTC(roomId: string | null) {
           localScreenStreamRef.current = null;
           setLocalScreenStream(null);
           setIsScreenSharing(false);
+          isScreenSharingRef.current = false;
           setScreenShareUserId(null);
 
           // Remove tracks from all peers
@@ -270,7 +284,7 @@ export function useWebRTC(roomId: string | null) {
           await renegotiateAll();
           emit(SIGNAL_EVENTS.MEDIA_STATE, {
             roomId,
-            isCameraOn: isCameraOn,
+            isCameraOn: isCameraOnRef.current,
             isScreenSharing: false,
           });
         };
@@ -278,7 +292,7 @@ export function useWebRTC(roomId: string | null) {
         await renegotiateAll();
         emit(SIGNAL_EVENTS.MEDIA_STATE, {
           roomId,
-          isCameraOn: isCameraOn,
+          isCameraOn: isCameraOnRef.current,
           isScreenSharing: true,
         });
       } catch (err) {
@@ -286,7 +300,7 @@ export function useWebRTC(roomId: string | null) {
         console.error('Failed to get screen share:', err);
       }
     }
-  }, [roomId, emit, isCameraOn, renegotiateAll]);
+  }, [roomId, emit, renegotiateAll]);
 
   const joinRoom = useCallback(async () => {
     if (!roomId) return;
@@ -328,7 +342,9 @@ export function useWebRTC(roomId: string | null) {
     }
 
     setIsCameraOn(false);
+    isCameraOnRef.current = false;
     setIsScreenSharing(false);
+    isScreenSharingRef.current = false;
     setScreenShareUserId(null);
   }, [roomId, emit]);
 
@@ -398,7 +414,10 @@ export function useWebRTC(roomId: string | null) {
       if (existingPeer) {
         pc = existingPeer.connection;
       } else {
-        pc = createPeerConnection(data.fromUserId, data.fromUserId);
+        // Look up displayName from peers ref (set by PEER_JOINED)
+        const peerInfo = peersRef.current.find((p) => p.userId === data.fromUserId);
+        const displayName = peerInfo?.displayName ?? data.fromUserId;
+        pc = createPeerConnection(data.fromUserId, displayName);
       }
 
       await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
