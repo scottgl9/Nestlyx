@@ -1,0 +1,138 @@
+# API Reference
+
+Base URL: `http://localhost:3001`
+
+## Authentication
+
+All endpoints require JWT authentication unless marked as **Public**.
+
+Include the token in the `Authorization` header:
+```
+Authorization: Bearer <token>
+```
+
+---
+
+## Auth
+
+### POST /auth/register (Public)
+Create a new account.
+
+**Body:**
+```json
+{ "email": "user@example.com", "password": "12345678", "displayName": "John" }
+```
+
+**Response:** `{ "accessToken": "...", "user": { "id", "email", "displayName" } }`
+
+### POST /auth/login (Public)
+Sign in with existing credentials.
+
+**Body:**
+```json
+{ "email": "user@example.com", "password": "12345678" }
+```
+
+**Response:** Same as register.
+
+### GET /auth/me
+Get the current authenticated user.
+
+**Response:** `{ "id": "...", "email": "..." }`
+
+---
+
+## Workspaces
+
+### POST /workspaces
+Create a workspace. The creator becomes the owner.
+
+**Body:** `{ "name": "My Workspace" }`
+
+### GET /workspaces
+List workspaces the current user is a member of.
+
+### GET /workspaces/:id
+Get workspace details including members.
+
+### POST /workspaces/:id/members
+Add a member to the workspace (requires OWNER or ADMIN role).
+
+**Body:** `{ "email": "user@example.com", "role": "MEMBER" }`
+
+---
+
+## Rooms
+
+### POST /workspaces/:wid/rooms
+Create a room in a workspace.
+
+**Body:** `{ "name": "Weekly Standup" }`
+
+### GET /workspaces/:wid/rooms
+List rooms in a workspace.
+
+### GET /rooms/:id
+Get room details with active participants.
+
+### POST /rooms/:id/join
+Join a room as a participant.
+
+### POST /rooms/:id/leave
+Leave a room.
+
+### GET /rooms/invite/:code (Public)
+Look up a room by invite code.
+
+---
+
+## Recordings
+
+### POST /recordings/start/:roomId
+Start a recording session.
+
+### POST /recordings/:id/stop
+Stop a recording session.
+
+### POST /recordings/:id/upload
+Upload the recorded audio file.
+
+**Body:** multipart/form-data with `file` field.
+
+### GET /recordings/room/:roomId
+List recordings for a room.
+
+### GET /recordings/:id/download
+Download a recording file.
+
+---
+
+## WebSocket Events
+
+### Chat Namespace (`/chat`)
+
+Connect with `auth: { token }` in handshake.
+
+| Event | Direction | Payload |
+|-------|-----------|---------|
+| `join` | client→server | `{ workspaceId, roomId? }` |
+| `chat:send` | client→server | `{ workspaceId, roomId?, content }` |
+| `chat:message` | server→client | `{ id, workspaceId, roomId, senderId, senderName, content, createdAt }` |
+| `chat:history` | client→server | `{ workspaceId, roomId?, cursor?, limit? }` |
+| `chat:history:response` | server→client | `{ messages[], hasMore, nextCursor }` |
+
+### Signaling Namespace (`/signaling`)
+
+Connect with `auth: { token }` in handshake.
+
+| Event | Direction | Payload |
+|-------|-----------|---------|
+| `signal:join-room` | client→server | `{ roomId }` |
+| `signal:leave-room` | client→server | `{}` |
+| `signal:offer` | client→server | `{ roomId, targetUserId, sdp }` |
+| `signal:answer` | client→server | `{ roomId, targetUserId, sdp }` |
+| `signal:ice-candidate` | client→server | `{ roomId, targetUserId, candidate }` |
+| `signal:mute-toggle` | client→server | `{ roomId, isMuted }` |
+| `signal:room-peers` | server→client | `{ roomId, peers[] }` |
+| `signal:peer-joined` | server→client | `{ roomId, peer }` |
+| `signal:peer-left` | server→client | `{ roomId, userId }` |

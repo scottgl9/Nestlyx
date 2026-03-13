@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  displayName  String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedWorkspaces  Workspace[]
+  memberships      WorkspaceMember[]
+  participants     Participant[]
+  chatMessages     ChatMessage[]
+  recordings       Recording[]
+  meetingEvents    MeetingEvent[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner    User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members  WorkspaceMember[]
+  rooms    Room[]
+  messages ChatMessage[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        String   @default("MEMBER")
+  joinedAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+model Room {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  inviteCode  String   @unique @default(uuid())
+  status      String   @default("IDLE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  participants Participant[]
+  messages     ChatMessage[]
+  recordings   Recording[]
+  events       MeetingEvent[]
+
+  @@map("rooms")
+}
+
+model Participant {
+  id       String    @id @default(uuid())
+  roomId   String
+  userId   String
+  role     String    @default("GUEST")
+  isMuted  Boolean   @default(false)
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("participants")
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  roomId      String?
+  workspaceId String
+  senderId    String
+  content     String
+  createdAt   DateTime @default(now())
+
+  room      Room?     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([roomId, createdAt])
+  @@map("chat_messages")
+}
+
+model Recording {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String
+  status    String   @default("RECORDING")
+  filePath  String?
+  fileSize  Int?
+  duration  Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("recordings")
+}
+
+model MeetingEvent {
+  id        String   @id @default(uuid())
+  roomId    String
+  type      String
+  actorId   String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  room  Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([roomId, createdAt])
+  @@map("meeting_events")
+}
