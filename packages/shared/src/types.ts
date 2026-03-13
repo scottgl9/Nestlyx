@@ -123,3 +123,14 @@ export interface PeerInfo {
   displayName: string;
   isMuted: boolean;
 }
+
+// ── Agent ────────────────────────────────────────────
+export interface AgentConfig {
+  id: string;
+  name: string;
+  displayName: string;
+  userId: string;
+  openclawAgent: string;
+  voiceEnabled: boolean;
+  isActive: boolean;
+}

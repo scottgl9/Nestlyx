@@ -20,7 +20,7 @@ interface RoomData {
   participants: Array<{
     id: string;
     isMuted: boolean;
-    user: { id: string; displayName: string };
+    user: { id: string; displayName: string; isBot?: boolean };
   }>;
 }
 
@@ -114,10 +114,17 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                   key={peer.userId}
                   className="flex flex-col items-center rounded-xl border bg-white p-4"
                 >
-                  <Avatar name={peer.displayName} size="lg" />
+                  <div className="relative">
+                    <Avatar name={peer.displayName} size="lg" />
+                    {(peer as any).isBot && (
+                      <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-indigo-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                        BOT
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-2 text-sm font-medium">{peer.displayName}</p>
                   <p className="text-xs text-gray-500">
-                    {peer.isMuted ? 'Muted' : 'Unmuted'}
+                    {(peer as any).isBot ? 'Agent' : peer.isMuted ? 'Muted' : 'Unmuted'}
                   </p>
                 </div>
               ))}

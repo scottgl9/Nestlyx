@@ -12,6 +12,7 @@ model User {
   email        String   @unique
   displayName  String
   passwordHash String
+  isBot        Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -21,8 +22,42 @@ model User {
   chatMessages     ChatMessage[]
   recordings       Recording[]
   meetingEvents    MeetingEvent[]
+  agentConfig      AgentConfig?
 
   @@map("users")
+}
+
+model AgentConfig {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  displayName   String
+  userId        String   @unique
+  openclawAgent String
+  voiceEnabled  Boolean  @default(false)
+  ttsVoiceId    String?
+  systemPrompt  String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id])
+  assignments AgentAssignment[]
+
+  @@map("agent_configs")
+}
+
+model AgentAssignment {
+  id          String   @id @default(uuid())
+  agentId     String
+  workspaceId String
+  roomId      String?
+  mentionOnly Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  agent AgentConfig @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, workspaceId, roomId])
+  @@map("agent_assignments")
 }
 
 model Workspace {

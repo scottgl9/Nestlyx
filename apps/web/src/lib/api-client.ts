@@ -56,6 +56,13 @@ class ApiClient {
     });
   }
 
+  del<T>(path: string, body?: unknown) {
+    return this.request<T>(path, {
+      method: 'DELETE',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
   async uploadFile<T>(path: string, file: Blob, fieldName = 'file'): Promise<T> {
     const token = this.getToken();
     const formData = new FormData();

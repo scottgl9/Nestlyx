@@ -15,6 +15,7 @@ export interface ChatMessageEvent {
   senderName: string;
   content: string;
   createdAt: string;
+  isBot?: boolean;
 }
 
 // ── Signaling Events ──────────────────────────────────

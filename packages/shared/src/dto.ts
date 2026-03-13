@@ -52,3 +52,19 @@ export interface ChatHistoryQuery {
 export interface CreateRecordingDto {
   roomId: string;
 }
+
+// ── Agent DTOs ───────────────────────────────────────
+export interface CreateAgentDto {
+  name: string;
+  displayName: string;
+  openclawAgent: string;
+  voiceEnabled?: boolean;
+  ttsVoiceId?: string;
+  systemPrompt?: string;
+}
+
+export interface AssignAgentDto {
+  workspaceId: string;
+  roomId?: string;
+  mentionOnly?: boolean;
+}

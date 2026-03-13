@@ -4,28 +4,38 @@ import {
   SubscribeMessage,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Server, Socket } from 'socket.io';
 import { CHAT_NAMESPACE, CHAT_EVENTS, MAX_CHAT_MESSAGE_LENGTH } from '@nestlyx/shared';
 import { ChatService } from './chat.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface AuthenticatedSocket extends Socket {
   data: { userId: string; email: string };
 }
 
 @WebSocketGateway({ namespace: CHAT_NAMESPACE, cors: { origin: '*' } })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(ChatGateway.name);
 
   constructor(
     private chatService: ChatService,
     private jwtService: JwtService,
+    private prisma: PrismaService,
+    @Optional() private eventEmitter?: EventEmitter2,
   ) {}
+
+  afterInit(server: Server) {
+    // Make server available to bridge service via event
+    this.eventEmitter?.emit('chat.server.init', server);
+  }
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
@@ -67,7 +77,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       ? `room:${data.roomId}`
       : `workspace:${data.workspaceId}`;
 
-    this.server.to(room).emit(CHAT_EVENTS.MESSAGE, {
+    // Check if sender is a bot
+    const sender = await this.prisma.user.findUnique({
+      where: { id: client.data.userId },
+      select: { isBot: true },
+    });
+    const isBot = sender?.isBot ?? false;
+
+    const payload = {
       id: message.id,
       workspaceId: data.workspaceId,
       roomId: data.roomId || null,
@@ -75,7 +92,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       senderName: message.sender.displayName,
       content: message.content,
       createdAt: message.createdAt.toISOString(),
-    });
+      isBot,
+    };
+
+    this.server.to(room).emit(CHAT_EVENTS.MESSAGE, payload);
+
+    // Emit internal event for bridge service
+    this.eventEmitter?.emit('chat.message.created', payload);
   }
 
   @SubscribeMessage(CHAT_EVENTS.HISTORY)

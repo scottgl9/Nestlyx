@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, Optional } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhisperService, TranscriptionResult } from './whisper.service';
 
@@ -16,6 +17,7 @@ export class TranscriptionService {
   constructor(
     private prisma: PrismaService,
     private whisper: WhisperService,
+    @Optional() private eventEmitter?: EventEmitter2,
   ) {}
 
   async transcribeRecording(recordingId: string) {
@@ -41,11 +43,11 @@ export class TranscriptionService {
 
     // Run transcription async (don't block the request)
     if (hasSpeakerTracks) {
-      this.runSpeakerTranscription(transcription.id, recording.speakerTracks).catch((err) => {
+      this.runSpeakerTranscription(transcription.id, recordingId, recording.speakerTracks).catch((err) => {
         this.logger.error(`Transcription ${transcription.id} failed: ${err.message}`);
       });
     } else {
-      this.runTranscription(transcription.id, recording.filePath!).catch((err) => {
+      this.runTranscription(transcription.id, recording.filePath!, recordingId).catch((err) => {
         this.logger.error(`Transcription ${transcription.id} failed: ${err.message}`);
       });
     }
@@ -53,7 +55,7 @@ export class TranscriptionService {
     return transcription;
   }
 
-  private async runTranscription(transcriptionId: string, filePath: string) {
+  private async runTranscription(transcriptionId: string, filePath: string, recordingId?: string) {
     try {
       const result = await this.whisper.transcribe(filePath);
 
@@ -68,6 +70,11 @@ export class TranscriptionService {
       });
 
       this.logger.log(`Transcription ${transcriptionId} completed`);
+
+      // Emit event for agent bridge
+      if (recordingId && result.text) {
+        this.emitTranscriptionCompleted(transcriptionId, recordingId, result.text);
+      }
     } catch (error: any) {
       await this.prisma.transcription.update({
         where: { id: transcriptionId },
@@ -81,6 +88,7 @@ export class TranscriptionService {
 
   private async runSpeakerTranscription(
     transcriptionId: string,
+    recordingId: string,
     speakerTracks: Array<{ userId: string; speakerName: string; filePath: string | null }>,
   ) {
     try {
@@ -130,6 +138,11 @@ export class TranscriptionService {
       this.logger.log(
         `Speaker transcription ${transcriptionId} completed (${speakerResults.length} speakers)`,
       );
+
+      // Emit event for agent bridge
+      if (formattedText) {
+        this.emitTranscriptionCompleted(transcriptionId, recordingId, formattedText);
+      }
     } catch (error: any) {
       await this.prisma.transcription.update({
         where: { id: transcriptionId },
@@ -156,6 +169,29 @@ export class TranscriptionService {
     }
 
     return lines.join(' ').trim();
+  }
+
+  private async emitTranscriptionCompleted(
+    transcriptionId: string,
+    recordingId: string,
+    text: string,
+  ) {
+    try {
+      const recording = await this.prisma.recording.findUnique({
+        where: { id: recordingId },
+        select: { roomId: true },
+      });
+      if (recording) {
+        this.eventEmitter?.emit('transcription.completed', {
+          transcriptionId,
+          recordingId,
+          roomId: recording.roomId,
+          text,
+        });
+      }
+    } catch (err: any) {
+      this.logger.error(`Failed to emit transcription event: ${err.message}`);
+    }
   }
 
   async getTranscription(id: string) {
